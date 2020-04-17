@@ -13,21 +13,13 @@ global {
 	//GIS Input//
 	
 	//map used to filter the object to build from the OSM file according to attributes. for an exhaustive list, see: http://wiki.openstreetmap.org/wiki/Map_Features
-	map filtering <- map(["highway"::["primary", "secondary", "tertiary", "motorway", "living_street","residential", "unclassified"], "building"::["yes"]]);
+	map filtering <- (["highway"::["primary", "secondary", "tertiary", "motorway", "living_street","residential", "unclassified"], "building"::["yes"]]);
+	
 	//OSM file to load
 	file<geometry> osmfile <-  file<geometry>(osm_file("C:/Users/mpizi/Downloads/map(2).osm", filtering))  ;
 	
 	//compute the size of the environment from the envelope of the OSM file
 	geometry shape <- envelope(osmfile);
-	
-	//file shape_file_buildings <- file("C:/Users/mpizi/Documents/Διπλωματική/buildings-polygon,shp"); //load buildings file
-	//file shape_file_roads <- file("C:/Users/mpizi/Documents/Διπλωματική/roads-line.shp"); //load road file
-	
-	file shape_file_buildings <- file("C:/Users/mpizi/Documents/Διπλωματική/Gama Platform/configuration/org.eclipse.osgi/15/0/.cp/models/Tutorials/Road Traffic/includes/building.shp");
-    file shape_file_roads <- file("C:/Users/mpizi/Documents/Διπλωματική/Gama Platform/configuration/org.eclipse.osgi/15/0/.cp/models/Tutorials/Road Traffic/includes/road.shp");
-	//file shape_file_buildings <- file("C:/Users/mpizi/Documents/Διπλωματική/TestGeo/shape/buildings.shp");
-	//file shape_file_roads <- file("C:/Users/mpizi/Documents/Διπλωματική/TestGeo/shape/roads.shp");
-	
 	
 	float step <- 1 #mn; //every step is defined as 10 minutes
 	
@@ -43,11 +35,11 @@ global {
 	int min_work_end <- 16; 
 	int max_work_end <- 18; 
 	
-	//tho following are variables conserning the speed that the agents are traveling. It is in km per hour
+	//tho following are variables conserning the speed that the agents are traveling. Measured in km/h
 	float min_speed <- 1.0 #km / #h;
 	float max_speed <- 5.0 #km / #h; 
 	
-	//tho following are variables conserning the speed that the missing person agent will be traveling. It is in km per hour
+	//tho following are variables conserning the speed that the missing person agent will be traveling. Measured in km/h
 	float min_speed_missing <- 1.0 #km / #h;
 	float max_speed_missing <- 3.0 #km / #h; 
 	
@@ -82,7 +74,8 @@ global {
 		
         map<road,float> weights_map <- road as_map (each:: (each.destruction_coeff * each.shape.perimeter));
         the_graph <- as_edge_graph(road) with_weights weights_map; //create the graph initialized above as an edge graph with weights
-		////////////the_graph <- as_edge_graph(road); //create the graph initialized above as an edge graph
+		
+		//graph without traffic: the_graph <- as_edge_graph(road); //create the graph initialized above as an edge graph
 		
 		
 		//the function that creates the people agents
@@ -190,13 +183,13 @@ species missing_person skills:[moving] {
 	
 	//this reflex sets the variable "found" to true when the list "people_nearby" has contents.
 	//If "people_nearby" has items in it, that means that there are agents nearby the missing person
-	reflex is_found when: length(people_nearby) >= 1{
-		//do die;
+	reflex is_found when: length(people_nearby) > 1{
+		do die;
 	}
 	
 	//this reflex sets the target of the missing person to a random building
 	reflex run when: objective = "running" and the_target = nil {
-		the_target <- (one_of(building));  // !!! one_of(the_graph.vertices)
+		the_target <- point(one_of(building));  // casted one_of(building) to point type!!! one_of(the_graph.vertices)
 		people_nearby <- agents_at_distance(1);
 	}
 		
@@ -265,8 +258,7 @@ species people skills:[moving] {
 
 
 experiment find_missing_person type: gui {
-	parameter "Shapefile for the buildings:" var: shape_file_buildings category: "GIS" ;
-	parameter "Shapefile for the roads:" var: shape_file_roads category: "GIS" ;
+	parameter "Open Street Map File for area of simulation" var: osmfile category: "GIS" ;
 	
 	parameter "Number of people agents" var: nb_people category: "People" ;
 	
@@ -286,6 +278,9 @@ experiment find_missing_person type: gui {
 	output {
 		
 		display city_display type: opengl {
+			species missing_person aspect: base ;
+			species people aspect: base ;
+					
 			species building aspect: base refresh: false;
 			species road aspect: base refresh: false;
 			species people aspect: base ;
@@ -298,7 +293,7 @@ experiment find_missing_person type: gui {
                 data "Resting" value: people count (each.objective="resting") color: #blue ;
             }
             chart "Number of people nearby the missing person" type: series  size: {1, 0.5} position: {0,0} {
-                data "Number of agents nearby" value: the_missing_agent get('nb_of_agents_nearby')  color: #red;
+                data "Number of agents nearby" value: int(the_missing_agent get('nb_of_agents_nearby'))  color: #red;
             }
             
         }
