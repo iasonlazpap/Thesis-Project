@@ -8,8 +8,6 @@
 model MyThesis
 
 global {
-	
-	
 	//GIS Input//
 	
 	//map used to filter the object to build from the OSM file according to attributes. for an exhaustive list, see: http://wiki.openstreetmap.org/wiki/Map_Features
@@ -33,7 +31,10 @@ global {
 	int min_work_start <- 7;
 	int max_work_start <- 9;
 	int min_work_end <- 16; 
-	int max_work_end <- 18; 
+	int max_work_end <- 18;
+	
+	//the following are variables concerning the missing person
+	int time_to_rest <- 3;
 	
 	//tho following are variables conserning the speed that the agents are traveling. Measured in km/h
 	float min_speed <- 1.0 #km / #h;
@@ -176,6 +177,8 @@ species missing_person skills:[moving] {
 
 	string objective <- "running" ; 
 	point the_target <- nil ;
+	int arrived <- 0;
+	
 		
 	list people_nearby <- agents_at_distance(1); // people_nearby equals all the agents (excluding the caller) which distance to the caller is lower than 1
 	
@@ -193,11 +196,19 @@ species missing_person skills:[moving] {
 		people_nearby <- agents_at_distance(1);
 	}
 		
+	reflex get_some_rest when: objective = "resting" and current_hour = arrived + time_to_rest{
+		objective <- "running";
+		
+		
+	}
+	
 	//this reflex defines how the missing person moves 
 	reflex move when: the_target != nil {
 		do goto target: the_target on: the_graph ; 
 		if the_target = location {
 			the_target <- nil ;
+			objective <- "resting";
+			arrived <- current_hour;
 		}
 	}
 	
@@ -232,7 +243,7 @@ species people skills:[moving] {
 	reflex time_to_go_home when: current_hour = end_work and objective = "working"{
 		objective <- "resting" ;
 		the_target <- any_location_in (living_place); 
-	} 
+	} 				
 	
 	
 	//this reflex defines how the people agent moves  
@@ -269,6 +280,8 @@ experiment find_missing_person type: gui {
     
 	parameter "minimum speed" var: min_speed category: "People" min: 0.1 #km/#h ;
 	parameter "maximum speed" var: max_speed category: "People" max: 50 #km/#h;
+	
+	parameter "Time for missiong person to rest" var: time_to_rest category: "People" ;
 	
 	parameter "minimum speed for missing person" var: min_speed_missing category: "People" min: 0.1 #km/#h ;
 	parameter "maximum speed for missing person" var: max_speed_missing category: "People" max: 50 #km/#h;
