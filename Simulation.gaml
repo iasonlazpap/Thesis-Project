@@ -10,6 +10,16 @@ model MyThesis
 global {
 	
 	
+	//GIS Input//
+	
+	//map used to filter the object to build from the OSM file according to attributes. for an exhaustive list, see: http://wiki.openstreetmap.org/wiki/Map_Features
+	map filtering <- map(["highway"::["primary", "secondary", "tertiary", "motorway", "living_street","residential", "unclassified"], "building"::["yes"]]);
+	//OSM file to load
+	file<geometry> osmfile <-  file<geometry>(osm_file("C:/Users/mpizi/Downloads/map(2).osm", filtering))  ;
+	
+	//compute the size of the environment from the envelope of the OSM file
+	geometry shape <- envelope(osmfile);
+	
 	//file shape_file_buildings <- file("C:/Users/mpizi/Documents/Διπλωματική/buildings-polygon,shp"); //load buildings file
 	//file shape_file_roads <- file("C:/Users/mpizi/Documents/Διπλωματική/roads-line.shp"); //load road file
 	
@@ -18,7 +28,6 @@ global {
 	//file shape_file_buildings <- file("C:/Users/mpizi/Documents/Διπλωματική/TestGeo/shape/buildings.shp");
 	//file shape_file_roads <- file("C:/Users/mpizi/Documents/Διπλωματική/TestGeo/shape/roads.shp");
 	
-	geometry shape <- envelope(envelope(shape_file_buildings) + envelope(shape_file_roads)); //create the geometry of the simulation using the building and road shape file
 	
 	float step <- 1 #mn; //every step is defined as 10 minutes
 	
@@ -52,10 +61,25 @@ global {
 	
 	init {
 		
-		//create the buildings and road from the imported files
-		create building from: shape_file_buildings;
-
-		create road from: shape_file_roads ;
+		//possibility to load all of the attibutes of the OSM data: for an exhaustive list, see: http://wiki.openstreetmap.org/wiki/Map_Features
+		create osm_agent from:osmfile with: [highway_str::string(read("highway")), building_str::string(read("building"))];
+		
+		//from the created generic agents, creation of the selected agents
+		ask osm_agent {
+			if (length(shape.points) = 1 and highway_str != nil ) {
+				create node_agent with: [shape ::shape, type:: highway_str]; 
+			} else {
+				if (highway_str != nil ) {
+					create road with: [shape ::shape, type:: highway_str];
+				} else if (building_str != nil){
+					create building with: [shape ::shape];
+				}  
+			}
+			//do the generic agent die
+			do die;
+		}
+		
+		
         map<road,float> weights_map <- road as_map (each:: (each.destruction_coeff * each.shape.perimeter));
         the_graph <- as_edge_graph(road) with_weights weights_map; //create the graph initialized above as an edge graph with weights
 		////////////the_graph <- as_edge_graph(road); //create the graph initialized above as an edge graph
@@ -113,6 +137,18 @@ global {
 }
 
 
+species osm_agent {
+	string highway_str;
+	string building_str;
+} 
+
+species node_agent {
+	string type;
+	aspect default { 
+		draw square(3) color: #red ;
+	}
+} 
+
 //define the building species
 species building {
 	string type; 
@@ -125,6 +161,7 @@ species building {
 
 //define the road species
 species road  {
+	string type; 
 	//rgb color <- #black ; //the color of each road
 	
 	//we will simulate traffeic with road_destruction
