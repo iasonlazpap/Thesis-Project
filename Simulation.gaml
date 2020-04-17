@@ -184,7 +184,7 @@ species missing_person skills:[moving] {
 	//this reflex sets the variable "found" to true when the list "people_nearby" has contents.
 	//If "people_nearby" has items in it, that means that there are agents nearby the missing person
 	reflex is_found when: length(people_nearby) > 1{
-		do die;
+		//do die;
 	}
 	
 	//this reflex sets the target of the missing person to a random building
@@ -278,13 +278,15 @@ experiment find_missing_person type: gui {
 	output {
 		
 		display city_display type: opengl {
+			
+			// refresh is useful in cases of not moving agents, but here for some 
+			//reason it messes with the relative positions of agents		
+			species building aspect: base; //refresh: false;
+			species road aspect: base; // refresh: false;
 			species missing_person aspect: base ;
-			species people aspect: base ;
-					
-			species building aspect: base refresh: false;
-			species road aspect: base refresh: false;
-			species people aspect: base ;
-			species missing_person aspect: base ;
+			species people aspect: base;
+			
+			
 		}
 		
 		display chart_display refresh:every(10#cycles) {
