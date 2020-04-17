@@ -1,11 +1,11 @@
 /***
-* Name: Billthesis
+* Name: MyThesis
 * Author: mpizi
 * Description: 
 * Tags: Tag1, Tag2, TagN
 ***/
 
-model Billthesis
+model MyThesis
 
 global {
 	
@@ -13,8 +13,8 @@ global {
 	//file shape_file_buildings <- file("C:/Users/mpizi/Documents/Διπλωματική/buildings-polygon,shp"); //load buildings file
 	//file shape_file_roads <- file("C:/Users/mpizi/Documents/Διπλωματική/roads-line.shp"); //load road file
 	
-	file shape_file_buildings <- file("../includes/building.shp");
-    file shape_file_roads <- file("../includes/road.shp");
+	file shape_file_buildings <- file("C:/Users/mpizi/Documents/Διπλωματική/Gama Platform/configuration/org.eclipse.osgi/15/0/.cp/models/Tutorials/Road Traffic/includes/building.shp");
+    file shape_file_roads <- file("C:/Users/mpizi/Documents/Διπλωματική/Gama Platform/configuration/org.eclipse.osgi/15/0/.cp/models/Tutorials/Road Traffic/includes/road.shp");
 	//file shape_file_buildings <- file("C:/Users/mpizi/Documents/Διπλωματική/TestGeo/shape/buildings.shp");
 	//file shape_file_roads <- file("C:/Users/mpizi/Documents/Διπλωματική/TestGeo/shape/roads.shp");
 	
