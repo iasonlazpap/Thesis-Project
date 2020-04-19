@@ -73,10 +73,11 @@ global {
 		}
 		
 		
-        map<road,float> weights_map <- road as_map (each:: (each.destruction_coeff * each.shape.perimeter));
-        the_graph <- as_edge_graph(road) with_weights weights_map; //create the graph initialized above as an edge graph with weights
+        //map<road,float> weights_map <- road as_map (each:: (each.destruction_coeff * each.shape.perimeter));
+        //the_graph <- as_edge_graph(road) with_weights weights_map; //create the graph initialized above as an edge graph with weights
 		
-		//graph without traffic: the_graph <- as_edge_graph(road); //create the graph initialized above as an edge graph
+		//graph without traffic:
+		the_graph <- as_edge_graph(road); //create the graph initialized above as an edge graph
 		
 		
 		//the function that creates the people agents
@@ -91,6 +92,28 @@ global {
 			//define a living and a working place for each agent from the imported buildings
 			living_place <- one_of(building) ;
 			working_place <- one_of(building) ;
+			//////////////
+			small_distance <- (living_place distance_to working_place < 0.1 #km);
+   			
+			shortest_path <- path_between (the_graph, living_place,working_place);
+			
+			//distance <- distance_between (the_graph, living_place, working_place);
+			//distance <- distance_to (shortest_path);
+   			path path_followed <- goto(target: working_place, on:the_graph, return_path: false);
+    			list<geometry> segments <- path_followed.segments;
+    			loop line over: segments {
+        				 distance <- distance + line.perimeter;
+        				
+        		}
+        	
+    	
+   			
+   				 //using topology(the_graph) {
+        			 
+   
+    			//}
+		//	}
+			
 			
 			objective <- "resting"; //each agent will begin resting, until it's time for him/her to go to work
 			
@@ -184,7 +207,7 @@ species missing_person skills:[moving] {
 	
 	int nb_of_agents_nearby -> {length(people_nearby)};
 	
-	//this reflex sets the variable "found" to true when the list "people_nearby" has contents.
+	//this reflex sets the variable "found" to true when	 the list "people_nearby" has contents.
 	//If "people_nearby" has items in it, that means that there are agents nearby the missing person
 	reflex is_found when: length(people_nearby) > 1{
 		//do die;
@@ -229,6 +252,10 @@ species people skills:[moving] {
 	building working_place <- nil ;
 	int start_work ;
 	int end_work  ;
+	
+	bool small_distance;
+	float distance;
+	path shortest_path;
 	
 	string objective ; 
 	point the_target <- nil ;
@@ -314,6 +341,7 @@ experiment find_missing_person type: gui {
         }
        
         monitor "Current Hour" value: current_hour;
+        
        
         
 	}
