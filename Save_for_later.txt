@@ -1,0 +1,18 @@
+//Discarded but still, potentially useful code snipets
+
+
+path shortest_path;
+shortest_path <- path_between (my_graph, source,destination);
+
+We need to compute from the road agents, a graph for the moving of the people agents. The operator as_edge_graph allows doing that. It automatically builds from a set of agents or geometries a graph where the agents are the edges of the graph, a node represent the extremities of the agent geometry. The weight of each edge corresponds to the length of the road.
+
+in init:
+//shortest_path <- path_between (the_graph, living_place,working_place);
+			
+			//distance <- distance_between (the_graph, living_place, working_place);
+			//distance <- distance_to (shortest_path);
+
+int agent class:
+
+//if (flag = true) {distance <- distance + path_followed.shape.perimeter;}
+		//flag <- false;

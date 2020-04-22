@@ -92,31 +92,12 @@ global {
 			//define a living and a working place for each agent from the imported buildings
 			living_place <- one_of(building) ;
 			working_place <- one_of(building) ;
-			//////////////
-			small_distance <- (living_place distance_to working_place < 0.1 #km);
-   			
-			shortest_path <- path_between (the_graph, living_place,working_place);
-			
-			//distance <- distance_between (the_graph, living_place, working_place);
-			//distance <- distance_to (shortest_path);
-   			path path_followed <- goto(target: working_place, on:the_graph, return_path: false);
-    			list<geometry> segments <- path_followed.segments;
-    			loop line over: segments {
-        				 distance <- distance + line.perimeter;
-        				
-        		}
-        	
-    	
-   			
-   				 //using topology(the_graph) {
-        			 
-   
-    			//}
-		//	}
-			
-			
+
+
+			distance <- 1.5 * (living_place distance_to working_place);
+			small_distance <- distance < 1 #km;
+   	
 			objective <- "resting"; //each agent will begin resting, until it's time for him/her to go to work
-			
 			location <- any_location_in (living_place); //the agents home is his/her starting location
 			
 		}
@@ -256,6 +237,7 @@ species people skills:[moving] {
 	bool small_distance;
 	float distance;
 	path shortest_path;
+	bool flag; 
 	
 	string objective ; 
 	point the_target <- nil ;
@@ -279,9 +261,11 @@ species people skills:[moving] {
     	list<geometry> segments <- path_followed.segments;
     	loop line over: segments {
         	float dist <- line.perimeter;
+        	
         	ask road(path_followed agent_from_geometry line) { 
         	destruction_coeff <- destruction_coeff + (destroy * dist / shape.perimeter);
         	}
+        	
     	}
 		if the_target = location {
 			the_target <- nil ;
