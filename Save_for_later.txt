@@ -12,7 +12,12 @@ in init:
 			//distance <- distance_between (the_graph, living_place, working_place);
 			//distance <- distance_to (shortest_path);
 
-int agent class:
+int species people:
 
 //if (flag = true) {distance <- distance + path_followed.shape.perimeter;}
 		//flag <- false;
+
+in species people: 
+
+//path shortest_path;
+	//bool flag; 

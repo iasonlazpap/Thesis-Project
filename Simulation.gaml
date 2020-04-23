@@ -39,6 +39,11 @@ global {
 	//tho following are variables conserning the speed that the agents are traveling. Measured in km/h
 	float min_speed <- 1.0 #km / #h;
 	float max_speed <- 5.0 #km / #h; 
+	float min_walking_speed <- 3 #km / #h;
+	float max_walking_speed <- 6 #km / #h;
+	float min_driving_speed <- 5 #km / #h;
+	float max_driving_speed <- 20 #km / #h;
+	
 	
 	//tho following are variables conserning the speed that the missing person agent will be traveling. Measured in km/h
 	float min_speed_missing <- 1.0 #km / #h;
@@ -83,11 +88,11 @@ global {
 		//the function that creates the people agents
 		create people number: nb_people {
 			
-			//define the speed, start and end work time that each agent will have.
+			//define start and end work time that each agent will have.
 			//these values are random so it will be different in each simulation
-			speed <- min_speed + rnd (max_speed - min_speed) ;
 			start_work <- min_work_start + rnd (max_work_start - min_work_start) ;
 			end_work <- min_work_end + rnd (max_work_end - min_work_end) ;
+			
 			
 			//define a living and a working place for each agent from the imported buildings
 			living_place <- one_of(building) ;
@@ -96,9 +101,21 @@ global {
 
 			distance <- 1.5 * (living_place distance_to working_place);
 			small_distance <- distance < 1 #km;
+			
+			if (small_distance) {walking_bool <- true;}
+			else {driving_bool <- true;}
    	
 			objective <- "resting"; //each agent will begin resting, until it's time for him/her to go to work
-			location <- any_location_in (living_place); //the agents home is his/her starting location
+			location <- any_location_in (living_place); //the agents home is his/her starting location	
+			
+			driving_bool <- false;
+			walking_bool <- false;
+			
+		
+			//define the speed
+			speed <- min_speed + rnd (max_speed - min_speed) ;
+			
+		
 			
 		}
 		
@@ -236,8 +253,8 @@ species people skills:[moving] {
 	
 	bool small_distance;
 	float distance;
-	path shortest_path;
-	bool flag; 
+	bool driving_bool <- nil;
+	bool walking_bool <- nil;
 	
 	string objective ; 
 	point the_target <- nil ;
@@ -255,21 +272,57 @@ species people skills:[moving] {
 	} 				
 	
 	
-	//this reflex defines how the people agent moves  
+/* 	//this reflex defines how the people agent moves  
 	reflex move when: the_target != nil {
    		path path_followed <- goto(target: the_target, on:the_graph, return_path: true);
     	list<geometry> segments <- path_followed.segments;
     	loop line over: segments {
         	float dist <- line.perimeter;
         	
-        	ask road(path_followed agent_from_geometry line) { 
-        	destruction_coeff <- destruction_coeff + (destroy * dist / shape.perimeter);
-        	}
+        	//ask road(path_followed agent_from_geometry line) { 
+        	//destruction_coeff <- destruction_coeff + (destroy * dist / shape.perimeter);
+        	//}
         	
     	}
 		if the_target = location {
 			the_target <- nil ;
 		}
+	}
+*/
+	
+	reflex walk when: (the_target !=nil and (distance_to (location, the_target) *1.4 < 1.0 #km)){
+		//boolean indicator initialization
+		walking_bool <- true;
+		speed <- min_walking_speed + rnd (max_walking_speed - min_walking_speed) ;
+		path path_followed <- goto(target: the_target, on:the_graph, return_path: true);
+    	list<geometry> segments <- path_followed.segments;
+    	loop line over: segments {
+        	float dist <- line.perimeter;
+    	}
+		if the_target = location {
+			the_target <- nil; 
+			//boolen indicator returning to default
+			walking_bool <- false;
+		}
+		
+	
+	}
+	
+	reflex drive when: (the_target !=nil and (distance_to (location, the_target) *1.4 > 1.0 #km)){
+		//boolean indicator initialization
+		driving_bool <- true;
+		speed <- min_driving_speed + rnd (max_driving_speed - min_driving_speed) ;
+		path path_followed <- goto(target: the_target, on:the_graph, return_path: true);
+    	list<geometry> segments <- path_followed.segments;
+    	loop line over: segments {
+        	float dist <- line.perimeter;
+    	}
+		if the_target = location {
+			the_target <- nil ;
+			//boolen indicator returning to default
+			driving_bool <- false;
+		}
+		
 	}
 	
 	//the visualisation of the missing person on the graph
@@ -325,8 +378,6 @@ experiment find_missing_person type: gui {
         }
        
         monitor "Current Hour" value: current_hour;
-        
-       
-        
+
 	}
 }
