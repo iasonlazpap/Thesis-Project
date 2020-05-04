@@ -9,45 +9,51 @@ model MyThesis
 
 global {
 	//GIS Input//
-	
+
 	//map used to filter the object to build from the OSM file according to attributes. for an exhaustive list, see: http://wiki.openstreetmap.org/wiki/Map_Features
 	map filtering <- (["highway"::["primary", "secondary", "tertiary", "motorway", "living_street","residential", "unclassified"], "building"::["yes"]]);
 	
 	//OSM file to load
-	file<geometry> osmfile <-  file<geometry>(osm_file("C:/Users/mpizi/Downloads/map(2).osm", filtering))  ;
+	file<geometry> osmfile <-  file<geometry>(osm_file("C:/Users/mpizi/Downloads/map(3).osm", filtering))  ;
 	
 	//compute the size of the environment from the envelope of the OSM file
 	geometry shape <- envelope(osmfile);
 	
-	float step <- 1 #mn; //every step is defined as 10 minutes
+	float step <- 1 #mn; //every step is defined as 1 minute
 	
 	int nb_people <- 100; //number of people in the simulation
 	int nb_missing <- 1; //number of missing people (It will always be 1 in this simulation)
 	int missing -> {length(missing_person)};
 	
 	int current_hour update: (time / #hour) mod 24; //the current hour of the simulation
-	
-	//the following are variables conserning the times that people go and leave work respectively
+	int current_min update: (time/ #minutes) mod 60;
+	//variables conserning the times that people go and leave work respectively
 	int min_work_start <- 7;
 	int max_work_start <- 9;
 	int min_work_end <- 16; 
 	int max_work_end <- 18;
 	
-	//the following are variables concerning the missing person
+	//variables concerning the missing person
 	int time_to_rest <- 3;
 	
-	//tho following are variables conserning the speed that the agents are traveling. Measured in km/h
-	float min_speed <- 1.0 #km / #h;
-	float max_speed <- 5.0 #km / #h; 
+	//variables concerning the speed that the agents are traveling. Measured in km/h
 	float min_walking_speed <- 3 #km / #h;
 	float max_walking_speed <- 6 #km / #h;
 	float min_driving_speed <- 5 #km / #h;
 	float max_driving_speed <- 20 #km / #h;
 	
+	//variables concerning the speed that the missing person agent will be traveling. Measured in km/h
+	float min_speed_missing <- 3.0 #km / #h;
+	float max_speed_missing <- 5.0 #km / #h; 
 	
-	//tho following are variables conserning the speed that the missing person agent will be traveling. Measured in km/h
-	float min_speed_missing <- 1.0 #km / #h;
-	float max_speed_missing <- 3.0 #km / #h; 
+	//variables concerning the probability of finding the missing person when near them
+	float proba_find_walking <- 0.4;
+	float proba_find_driving <- 0.1;
+	float proba_find_resting <- 0.05;
+	
+	//bool variable for mp resting
+	//When missing person is resting it is unlikely that they will be found
+	bool m_p_resting<-true;
 	
 	graph the_graph; //initialize the graph that the agents will be moving on
 	
@@ -113,7 +119,7 @@ global {
 			
 		
 			//define the speed
-			speed <- min_speed + rnd (max_speed - min_speed) ;
+			//speed <- min_speed + rnd (max_speed - min_speed) ;
 			
 		
 			
@@ -122,14 +128,7 @@ global {
 		//the function that creates the missing person agent
 		create missing_person number: nb_missing {
 			
-			speed <- min_speed + rnd (max_speed - min_speed) ;
-			
-			//these are not used for the missing person agent
-			/*
-			start_work <- min_work_start + rnd (max_work_start - min_work_start) ;
-			end_work <- min_work_end + rnd (max_work_end - min_work_end) ;
-			*/
-			
+			speed <- min_speed_missing + rnd (max_speed_missing- min_speed_missing) ;		
 			
 			//the following are similar to the normal agents parameters
 			living_place <- one_of(building) ;
@@ -207,18 +206,23 @@ species missing_person skills:[moving] {
 	
 	//this reflex sets the variable "found" to true when	 the list "people_nearby" has contents.
 	//If "people_nearby" has items in it, that means that there are agents nearby the missing person
-	reflex is_found when: length(people_nearby) > 1{
+	/*reflex is_found when: people_nearby contains_any people{
+		write people_nearby;
 		//do die;
-	}
+	}*/
 	
 	//this reflex sets the target of the missing person to a random building
 	reflex run when: objective = "running" and the_target = nil {
 		the_target <- point(one_of(building));  // casted one_of(building) to point type!!! one_of(the_graph.vertices)
-		people_nearby <- agents_at_distance(1);
+		//people_nearby <- agents_at_distance(1000);
+		arrived <- current_hour;
 	}
 		
-	reflex get_some_rest when: objective = "resting" and current_hour = arrived + time_to_rest{
+
+	reflex get_some_rest when: objective = "resting" and (current_hour = (arrived + time_to_rest)mod 24) {
+		//write "HEY";
 		objective <- "running";
+		m_p_resting <- false;
 		
 		
 	}
@@ -230,6 +234,7 @@ species missing_person skills:[moving] {
 			the_target <- nil ;
 			objective <- "resting";
 			arrived <- current_hour;
+			m_p_resting <- true;
 		}
 	}
 	
@@ -271,24 +276,32 @@ species people skills:[moving] {
 		the_target <- any_location_in (living_place); 
 	} 				
 	
+	//this reflex defines ...
+	reflex missing_person_nearby when: agents_at_distance(5) contains_any missing_person {
 	
-/* 	//this reflex defines how the people agent moves  
-	reflex move when: the_target != nil {
-   		path path_followed <- goto(target: the_target, on:the_graph, return_path: true);
-    	list<geometry> segments <- path_followed.segments;
-    	loop line over: segments {
-        	float dist <- line.perimeter;
-        	
-        	//ask road(path_followed agent_from_geometry line) { 
-        	//destruction_coeff <- destruction_coeff + (destroy * dist / shape.perimeter);
-        	//}
-        	
-    	}
-		if the_target = location {
-			the_target <- nil ;
+		if(walking_bool){
+			//write "Walking and near";
+			if(flip(proba_find_walking)){
+				write "Took a walk and stars aligned, FOUND by";
+				write self;
+			}
 		}
+		else if(driving_bool){
+			//write "Driving and near";
+			if(flip(proba_find_driving)){
+				write "Prayers to driving gods helped, FOUND by";
+				write self;
+			}
+		}
+		else {
+			//write "Resting Phase and Near"
+			if(flip(proba_find_resting) and m_p_resting = false){
+				write "Quarantine is King, FOUND by";
+				write self;
+			}
+		}
+		
 	}
-*/
 	
 	reflex walk when: (the_target !=nil and (distance_to (location, the_target) *1.4 < 1.0 #km)){
 		//boolean indicator initialization
@@ -336,25 +349,40 @@ experiment find_missing_person type: gui {
 	parameter "Open Street Map File for area of simulation" var: osmfile category: "GIS" ;
 	
 	parameter "Number of people agents" var: nb_people category: "People" ;
+	parameter "Time for missing person to rest" var: time_to_rest category: "Missing_Person" ;
+	parameter "Probability of finding ms if walking" var: proba_find_walking category: "Probabilities" min: 0.01 max: 1.0;
+	parameter "Probability of finding ms if driving" var: proba_find_driving category: "Probabilities" min: 0.01 max: 1.0;
+	parameter "Probability of finding ms while resting" var: proba_find_resting category: "Probabilities" min: 0.01 max: 1.0;
 	
-	parameter "Earliest hour to start work" var: min_work_start category: "People" min: 2 max: 8;
-    parameter "Latest hour to start work" var: max_work_start category: "People" min: 8 max: 12;
-    parameter "Earliest hour to end work" var: min_work_end category: "People" min: 12 max: 16;
-    parameter "Latest hour to end work" var: max_work_end category: "People" min: 16 max: 23;
-    
-	parameter "minimum speed" var: min_speed category: "People" min: 0.1 #km/#h ;
-	parameter "maximum speed" var: max_speed category: "People" max: 50 #km/#h;
-	
-	parameter "Time for missiong person to rest" var: time_to_rest category: "People" ;
-	
-	parameter "minimum speed for missing person" var: min_speed_missing category: "People" min: 0.1 #km/#h ;
-	parameter "maximum speed for missing person" var: max_speed_missing category: "People" max: 50 #km/#h;
-	
-	parameter "Value of destruction when a people agent takes a road" var: destroy category: "Road" ;
+	//parameter "Earliest hour to start work" var: min_work_start category: "People" min: 2 max: 8;
+    //parameter "Latest hour to start work" var: max_work_start category: "People" min: 8 max: 12;
+    //parameter "Earliest hour to end work" var: min_work_end category: "People" min: 12 max: 16;
+    //parameter "Latest hour to end work" var: max_work_end category: "People" min: 16 max: 23;
+   	//parameter "minimum speed" var: min_speed category: "People" min: 0.1 #km/#h ;
+	//parameter "maximum speed" var: max_speed category: "People" max: 50 #km/#h;
+	//parameter "minimum speed for missing person" var: min_speed_missing category: "Missing_Person" min: 0.1 #km/#h ;
+	//parameter "maximum speed for missing person" var: max_speed_missing category: "Missing_Person" max: 50 #km/#h;
+	//parameter "Value of destruction when a people agent takes a road" var: destroy category: "Road" ;
 	
 	output {
 		
-		display city_display type: opengl {
+		
+		
+		display chart_display refresh:every(10#cycles) {
+			chart "People Objective" type: pie style: exploded size: {1, 0.5} position: {0, 0.5}{
+                data "Working" value: people count (each.objective="working") color: #magenta ;
+                data "Resting" value: people count (each.objective="resting") color: #blue ;
+            }
+            chart "Number of people nearby the missing person" type: series  size: {1, 0.5} position: {0,0} {
+                data "Number of agents nearby" value: int(the_missing_agent get('nb_of_agents_nearby'))  color: #red;
+            }
+            /*chart "Number of times missiong person may have been found" type series size: {1, 0.5} position: {0,-0.5}{
+            	data ""
+            }*/
+            
+        }
+        
+        display city_display type: opengl {
 			
 			// refresh is useful in cases of not moving agents, but here for some 
 			//reason it messes with the relative positions of agents		
@@ -365,19 +393,9 @@ experiment find_missing_person type: gui {
 			
 			
 		}
-		
-		display chart_display refresh:every(10#cycles) {
-			chart "People Objective" type: pie style: exploded size: {1, 0.5} position: {0, 0.5}{
-                data "Working" value: people count (each.objective="working") color: #magenta ;
-                data "Resting" value: people count (each.objective="resting") color: #blue ;
-            }
-            chart "Number of people nearby the missing person" type: series  size: {1, 0.5} position: {0,0} {
-                data "Number of agents nearby" value: int(the_missing_agent get('nb_of_agents_nearby'))  color: #red;
-            }
-            
-        }
        
         monitor "Current Hour" value: current_hour;
+        monitor "Current Minute" value: current_min;
 
 	}
 }
