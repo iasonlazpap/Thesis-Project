@@ -14,7 +14,7 @@ global {
 	map filtering <- (["highway"::["primary", "secondary", "tertiary", "motorway", "living_street","residential", "unclassified"], "building"::["yes"]]);
 	
 	//OSM file to load
-	file<geometry> osmfile <-  file<geometry>(osm_file("C:/Users/mpizi/Downloads/map(3).osm", filtering))  ;
+	file<geometry> osmfile <-  file<geometry>(osm_file("C:/Users/mpizi/Downloads/map(2).osm", filtering))  ;
 	
 	//compute the size of the environment from the envelope of the OSM file
 	geometry shape <- envelope(osmfile);
@@ -51,6 +51,12 @@ global {
 	float proba_find_driving <- 0.1;
 	float proba_find_resting <- 0.05;
 	
+	//variables for probabilistic location of missing person
+	point Point_of_Interest1 <- nil;
+	string Point_of_Interest1_name <- nil;
+	point MP_Starting_Pos <- nil;
+	string MP_Starting_Pos_name <- nil;
+	
 	//bool variable for mp resting
 	//When missing person is resting it is unlikely that they will be found
 	bool m_p_resting<-true;
@@ -61,6 +67,11 @@ global {
 	agent the_missing_agent -> missing_agents at 0;
 	
 	float destroy <- 0.02; // burden on road if people agent moves through it
+	
+	bool a_boolean_to_enable_parameters1 <- false;
+	bool a_boolean_to_enable_parameters2 <- false;
+	
+	
 
 	
 	init {
@@ -131,11 +142,52 @@ global {
 			speed <- min_speed_missing + rnd (max_speed_missing- min_speed_missing) ;		
 			
 			//the following are similar to the normal agents parameters
-			living_place <- one_of(building) ;
+			
+			if (MP_Starting_Pos_name != nil){
+				ask building.population {
+					if (name = MP_Starting_Pos_name) {
+						MP_Starting_Pos <- location;
+						write "Starting Position Coordinates";
+						write MP_Starting_Pos;
+						myself.living_place <- self;
+						myself.input_flag <- true;
+						self.color <- #maroon;
+					}
+					
+				} 
+				
+				if(!input_flag) {
+					write "Wrong Input Starting Position";
+					living_place <- one_of(building) ;
+					location <- any_location_in (living_place);
+				}
+				else {
+					location <- MP_Starting_Pos;
+				}
+				
+			}
+			else{
+				living_place <- one_of(building) ;
+				location <- any_location_in (living_place); 
+			}
 			objective <- "running";
-			location <- any_location_in (living_place); 
 			
 			
+			if(Point_of_Interest1_name != nil) { 
+				ask building.population {
+					if (name = Point_of_Interest1_name) {
+						Point_of_Interest1 <- location;
+						write Point_of_Interest1;
+						myself.input_flag <- true;
+						self.color <- #gamablue;
+					}
+					
+					if(!myself.input_flag) {
+						write "Wrong Input PoI, no PoI added";
+						
+					}
+				} 
+			}
 		}
 	}
 	
@@ -191,33 +243,33 @@ species road  {
 
 //define the missing_person species
 species missing_person skills:[moving] {
-	rgb color <- #red;
-	
-	building living_place <- nil ;
+	rgb color <- #maroon;
 
+	building living_place <- nil ;
+	//PoI.type <-  Point_of_Interest1_name;
 	string objective <- "running" ; 
 	point the_target <- nil ;
 	int arrived <- 0;
+	bool input_flag <- false;
+	
 	
 		
 	list people_nearby <- agents_at_distance(1); // people_nearby equals all the agents (excluding the caller) which distance to the caller is lower than 1
 	
 	int nb_of_agents_nearby -> {length(people_nearby)};
 	
-	//this reflex sets the variable "found" to true when	 the list "people_nearby" has contents.
-	//If "people_nearby" has items in it, that means that there are agents nearby the missing person
-	/*reflex is_found when: people_nearby contains_any people{
-		write people_nearby;
-		//do die;
-	}*/
 	
-	//this reflex sets the target of the missing person to a random building
+	//this reflex sets the target of the missing person to either a random building or a number of Points of Interest
 	reflex run when: objective = "running" and the_target = nil {
-		the_target <- point(one_of(building));  // casted one_of(building) to point type!!! one_of(the_graph.vertices)
-		//people_nearby <- agents_at_distance(1000);
-		arrived <- current_hour;
-	}
 		
+		if(Point_of_Interest1 != nil and flip(0.4)){
+			the_target <- Point_of_Interest1;
+		}
+		else {
+			the_target <- point(one_of(building));  // casted one_of(building) to point type!!! one_of(the_graph.vertices);
+		}
+		arrived <- current_hour;
+	}		
 
 	reflex get_some_rest when: objective = "resting" and (current_hour = (arrived + time_to_rest)mod 24) {
 		//write "HEY";
@@ -249,7 +301,7 @@ species missing_person skills:[moving] {
 //define the people species
 species people skills:[moving] {
 	
-	rgb color <- #yellow ;
+	rgb color <- #teal;
 	
 	building living_place <- nil ;
 	building working_place <- nil ;
@@ -348,21 +400,34 @@ species people skills:[moving] {
 experiment find_missing_person type: gui {
 	parameter "Open Street Map File for area of simulation" var: osmfile category: "GIS" ;
 	
-	parameter "Number of people agents" var: nb_people category: "People" ;
+	parameter "Number of people agents" var: nb_people category: "GIS" ;
 	parameter "Time for missing person to rest" var: time_to_rest category: "Missing_Person" ;
 	parameter "Probability of finding ms if walking" var: proba_find_walking category: "Probabilities" min: 0.01 max: 1.0;
 	parameter "Probability of finding ms if driving" var: proba_find_driving category: "Probabilities" min: 0.01 max: 1.0;
 	parameter "Probability of finding ms while resting" var: proba_find_resting category: "Probabilities" min: 0.01 max: 1.0;
+	//parameter "PoInterest for missing Person" var: Point_of_Interest1 category: "Missing_Person";
+	parameter "PoI building name" var: Point_of_Interest1_name category: "Missing_Person";
+	parameter "Starting Position" var:  MP_Starting_Pos_name category: "Missing_Person";
 	
-	//parameter "Earliest hour to start work" var: min_work_start category: "People" min: 2 max: 8;
-    //parameter "Latest hour to start work" var: max_work_start category: "People" min: 8 max: 12;
-    //parameter "Earliest hour to end work" var: min_work_end category: "People" min: 12 max: 16;
-    //parameter "Latest hour to end work" var: max_work_end category: "People" min: 16 max: 23;
-   	//parameter "minimum speed" var: min_speed category: "People" min: 0.1 #km/#h ;
-	//parameter "maximum speed" var: max_speed category: "People" max: 50 #km/#h;
-	//parameter "minimum speed for missing person" var: min_speed_missing category: "Missing_Person" min: 0.1 #km/#h ;
-	//parameter "maximum speed for missing person" var: max_speed_missing category: "Missing_Person" max: 50 #km/#h;
-	//parameter "Value of destruction when a people agent takes a road" var: destroy category: "Road" ;
+	
+	// Category: interactive enable
+	//////////////////////////////////////////////
+	// In the following, when a_boolean_to_enable_parameters1 ορ 2 is true, it enables the corresponding parameters 
+	parameter "People" category:"Activate Extended Parameters" var:a_boolean_to_enable_parameters1 enables: [min_work_start, max_work_start,
+		 min_work_end, max_work_end, min_walking_speed, max_walking_speed, min_driving_speed, max_driving_speed];
+	parameter "Missing Person" category:"Activate Extended Parameters" var:a_boolean_to_enable_parameters2 enables: [min_speed_missing, max_speed_missing ];
+	
+	parameter "Earliest hour to start work"  category: "People" var: min_work_start min: 2 max: 8 step: 0.5;
+    parameter "Latest hour to start work" var: max_work_start category: "People" min: 8 max: 12;
+    parameter "Earliest hour to end work" var: min_work_end category: "People" min: 12 max: 16;
+    parameter "Latest hour to end work" var: max_work_end category: "People" min: 16 max: 23;
+   	parameter "minimum speed" var: min_walking_speed category: "People" min: 0.1 #km/#h ;
+	parameter "maximum speed" var: max_walking_speed category: "People" max: 50 #km/#h;
+	parameter "minimum speed" var: min_driving_speed category: "People" min: 0.1 #km/#h ;
+	parameter "maximum speed" var: max_driving_speed category: "People" max: 50 #km/#h;
+	parameter "minimum speed for missing person" var: min_speed_missing category: "Missing_Person Ext" min: 0.1 #km/#h ;
+	parameter "maximum speed for missing person" var: max_speed_missing category: "Missing_Person Ext" max: 50 #km/#h;
+	parameter "Value of destruction when a people agent takes a road" var: destroy category: "Road" ;
 	
 	output {
 		
