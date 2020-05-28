@@ -10,6 +10,8 @@ model MyThesis
 global {
 	//GIS Input//
 	
+	
+	
 	date true_date <- #now;
 	int year_missing <- true_date.year;
 	int month_missing <- true_date.month;
@@ -21,7 +23,7 @@ global {
 	map filtering <- (["highway"::["primary", "secondary", "tertiary", "motorway", "living_street","residential", "unclassified"], "building"::["yes"]]);
 	
 	//OSM file to load
-	file<geometry> osmfile <-  file<geometry>(osm_file("C:/Users/mpizi/Downloads/map(2).osm", filtering))  ;
+	file<geometry> osmfile <-  file<geometry>(osm_file("C:/Users/mpizi/Downloads/map(5).osm", filtering))  ;
 	
 	//compute the size of the environment from the envelope of the OSM file
 	geometry shape <- envelope(osmfile);
@@ -29,7 +31,7 @@ global {
 	float step <- 1 #mn; //every step is defined as 1 minute
 	
 	
-	int nb_people <- 100; //number of people in the simulation
+	int nb_people <- 473; //number of people in the simulation
 	int nb_missing <- 1; //number of missing people (It will always be 1 in this simulation)
 	int missing -> {length(missing_person)};
 	int days_that_is_missing update: int(time / #day);
@@ -80,13 +82,29 @@ global {
 	
 	float destroy <- 0.02; // burden on road if people agent moves through it
 	
+	float demographic_driving <- 0.0;
+	float demographic_walking <- 0.0;
+	bool demographic_bool;
+	
 	bool a_boolean_to_enable_parameters1 <- false;
 	bool a_boolean_to_enable_parameters2 <- false;
 	bool a_boolean_to_enable_parameters3 <- false;	
+	bool a_boolean_to_enable_parameters4 <- false;
 	
 
 	
 	init {
+		
+		if(demographic_driving != 0.0 or demographic_walking != 0.0) {
+			demographic_bool <- true;
+			if(demographic_driving = 0.0) {
+				demographic_driving <- 100 - demographic_walking;
+			}
+			else {
+				demographic_walking <- 100 - demographic_driving;
+			}
+		}
+		else {demographic_bool <- false;}
 		
 		//possibility to load all of the attibutes of the OSM data: for an exhaustive list, see: http://wiki.openstreetmap.org/wiki/Map_Features
 		create osm_agent from:osmfile with: [highway_str::string(read("highway")), building_str::string(read("building"))];
@@ -119,8 +137,10 @@ global {
 			
 			//define start and end work time that each agent will have.
 			//these values are random so it will be different in each simulation
-			start_work <- min_work_start + rnd (max_work_start - min_work_start) ;
-			end_work <- min_work_end + rnd (max_work_end - min_work_end) ;
+			start_work_hour <- min_work_start + rnd (max_work_start - min_work_start) ;
+			start_work_min <- rnd(0,60);
+			end_work_hour <- min_work_end + rnd (max_work_end - min_work_end) ;
+			end_work_min <- rnd(0,60);
 			
 			
 			//define a living and a working place for each agent from the imported buildings
@@ -131,36 +151,39 @@ global {
 			home_spot <- any_location_in (living_place);
 			work_spot <- any_location_in (working_place);
 
-
-			distance <- 1.5 * (living_place distance_to working_place);
-			small_distance <- distance < 1 #km;
-			
-			if (small_distance) {walking_bool <- true;}
-			else {driving_bool <- true;}
+			if (demographic_bool){
+				if(flip(demographic_driving/100)) {
+					//write("local demo driving = true");
+					local_demo_driving <- true;
+				}
+				else {
+					//write("local demo walking = true");
+					local_demo_driving <- false;
+				}
+			}
+			//distance <- 1.5 * (living_place distance_to working_place);
+			//small_distance <- distance < 1 #km;
+			//if (small_distance) {walking_bool <- true;}
+			//else {driving_bool <- true;}
    	
 			//depending on the starting time of the simulation, the agent's starting location is either their
 			//home or their workplace. Depending on where they are, the objective will either be working or resting.
-			write(current_hour);
-			if(current_hour >= start_work and current_hour <= end_work) {
-				write("LOCATION WORK"); 
+			//write(current_hour);
+			if((current_hour > start_work_hour and current_hour < end_work_hour) or (current_hour = start_work_hour and current_min > start_work_min) or 
+				(current_hour = end_work_hour and current_min < end_work_min))
+			{
+				//write("LOCATION WORK"); 
 				objective <- "working";
 				location <- work_spot;
 			}
 			else {
-				write("LOCATION HOME"); 
+				//write("LOCATION HOME"); 
 				objective <- "resting";
 				location <- home_spot;
 			}
-		
+			
 			driving_bool <- false;
-			walking_bool <- false;
-			
-		
-			//define the speed
-			//speed <- min_speed + rnd (max_speed - min_speed) ;
-			
-		
-			
+			walking_bool <- false;			
 		}
 		
 		//the function that creates the missing person agent
@@ -332,8 +355,10 @@ species people skills:[moving] {
 	
 	building living_place <- nil ;
 	building working_place <- nil ;
-	int start_work ;
-	int end_work  ;
+	int start_work_hour;
+	int start_work_min;
+	int end_work_hour;
+	int end_work_min;
 	
 	bool small_distance;
 	float distance;
@@ -344,49 +369,68 @@ species people skills:[moving] {
 	point the_target <- nil ;
 	point work_spot <- nil;
 	point home_spot <- nil;
+	
+	bool local_demo_driving;
 		
 	//this reflex sets the target when it's time to work and changes the objective of the agent to working
-	reflex time_to_work when: current_hour = start_work and objective = "resting"{
+	reflex time_to_work when: current_hour = start_work_hour and current_min = start_work_min and objective = "resting"{
 		objective <- "working" ;
 		the_target <- work_spot;
+		distance <- 1.5 * (living_place distance_to working_place);
+		small_distance <- distance < 1 #km;		
+		if(demographic_bool){
+			if(local_demo_driving){driving_bool <- true;}
+			else {walking_bool <- true;}
+		}
+		else{
+			if(small_distance) {walking_bool <- true;}
+			else {driving_bool<-true;}
+		}		
+		
 	}
 		
 	//this reflex sets the target when it's time to go home and changes the objective of the agent to resting
-	reflex time_to_go_home when: current_hour = end_work and objective = "working"{
+	reflex time_to_go_home when: current_hour = end_work_hour and current_min = end_work_min and objective = "working"{
 		objective <- "resting" ;
 		the_target <- home_spot; 
+		distance <- 1.5 * (living_place distance_to working_place);
+		small_distance <- distance < 1 #km;
+		if(demographic_bool){
+			if(local_demo_driving){driving_bool <- true;}
+			else {walking_bool <- true;}
+		}
+		else{
+			if(small_distance) {walking_bool <- true;}
+			else {driving_bool<-true;}
+		}
 	} 				
 	
 	//this reflex defines ...
-	reflex missing_person_nearby when: agents_at_distance(5) contains_any missing_person {
-	
+	reflex missing_person_nearby when: agents_at_distance(7) contains_any missing_person {
 		if(walking_bool){
-			//write "Walking and near";
+			write "Walking and near " + self;
 			if(flip(proba_find_walking)){
-				write "Took a walk and stars aligned, FOUND by";
-				write self;
+				write "Took a walk and stars aligned, FOUND by " + self;
 			}
 		}
 		else if(driving_bool){
-			//write "Driving and near";
+			write ("Driving and near" + self);
 			if(flip(proba_find_driving)){
-				write "Prayers to driving gods helped, FOUND by";
-				write self;
+				write "Prayers to driving gods helped, FOUND by " + self;
 			}
 		}
 		else {
-			//write "Resting Phase and Near"
+			//write "Resting Phase and Near";
 			if(flip(proba_find_resting) and m_p_resting = false){
-				write "Quarantine is King, FOUND by";
-				write self;
+				write "Quarantine is King, FOUND by" +self;
 			}
 		}
 		
 	}
 	
-	reflex walk when: (the_target !=nil and (distance_to (location, the_target) *1.4 < 1.0 #km)){
+	reflex walk when: (the_target !=nil and walking_bool){
 		//boolean indicator initialization
-		walking_bool <- true;
+		driving_bool <- false;
 		speed <- min_walking_speed + rnd (max_walking_speed - min_walking_speed) ;
 		path path_followed <- goto(target: the_target, on:the_graph, return_path: true);
     	list<geometry> segments <- path_followed.segments;
@@ -396,15 +440,15 @@ species people skills:[moving] {
 		if the_target = location {
 			the_target <- nil; 
 			//boolen indicator returning to default
+			//write "Walking boolen indicator returning to default";
 			walking_bool <- false;
 		}
 		
 	
 	}
 	
-	reflex drive when: (the_target !=nil and (distance_to (location, the_target) *1.4 > 1.0 #km)){
+	reflex drive when: (the_target !=nil and driving_bool){
 		//boolean indicator initialization
-		driving_bool <- true;
 		speed <- min_driving_speed + rnd (max_driving_speed - min_driving_speed) ;
 		path path_followed <- goto(target: the_target, on:the_graph, return_path: true);
     	list<geometry> segments <- path_followed.segments;
@@ -413,6 +457,7 @@ species people skills:[moving] {
     	}
 		if the_target = location {
 			the_target <- nil ;
+			//write "Driving boolen indicator returning to default";
 			//boolen indicator returning to default
 			driving_bool <- false;
 		}
@@ -439,19 +484,25 @@ experiment find_missing_person type: gui {
 	parameter "Starting Position" var:  MP_Starting_Pos_name category: "Missing_Person";
 	
 	// Category: interactive enable
-	//////////////////////////////////////////////
 	// In the following, when a_boolean_to_enable_parameters1 ορ 2 is true, it enables the corresponding parameters 
 	parameter "Start Time" category: "Activate Extended Parameters" var:a_boolean_to_enable_parameters1 enables: [year_missing, month_missing, day_missing, hour_missing, minute_missing];
-	parameter "People" category:"Activate Extended Parameters" var:a_boolean_to_enable_parameters2 enables: [min_work_start, max_work_start,
+	parameter "Demographics" category: "Activate Extended Parameters" var: a_boolean_to_enable_parameters2 enables: [demographic_driving,demographic_walking];
+	parameter "People" category:"Activate Extended Parameters" var:a_boolean_to_enable_parameters3 enables: [min_work_start, max_work_start,
 		 min_work_end, max_work_end, min_walking_speed, max_walking_speed, min_driving_speed, max_driving_speed];
-	parameter "Missing Person" category:"Activate Extended Parameters" var:a_boolean_to_enable_parameters3 enables: [min_speed_missing, max_speed_missing ];
+	parameter "Missing Person" category:"Activate Extended Parameters" var:a_boolean_to_enable_parameters4 enables: [min_speed_missing, max_speed_missing ];
 	
+	//Start Time Activatable Parameters
 	parameter "Year" var: year_missing category: "Start Time";
 	parameter "Month" var: month_missing category: "Start Time";
 	parameter "Day" var: day_missing category: "Start Time";
 	parameter "Hour" var: hour_missing category: "Start Time";
 	parameter "Minute" var: minute_missing category: "Start Time";
 	
+	//Demographic Data Activatable Parameters
+	parameter "Drivers in Area (%) (Fill only one)" var: demographic_driving category: "Demographics";
+	parameter "Walkers in Area (%) (Fill only one)" var: demographic_walking category: "Demographics";
+	
+	//People Activatable Parameters
 	parameter "Earliest hour to start work"  category: "People" var: min_work_start min: 2 max: 8 step: 0.5;
     parameter "Latest hour to start work" var: max_work_start category: "People" min: 8 max: 12;
     parameter "Earliest hour to end work" var: min_work_end category: "People" min: 12 max: 16;
@@ -460,8 +511,12 @@ experiment find_missing_person type: gui {
 	parameter "maximum speed" var: max_walking_speed category: "People" max: 50 #km/#h;
 	parameter "minimum speed" var: min_driving_speed category: "People" min: 0.1 #km/#h ;
 	parameter "maximum speed" var: max_driving_speed category: "People" max: 50 #km/#h;
+	
+	//Missing Person Activatable Parameters
 	parameter "minimum speed for missing person" var: min_speed_missing category: "Missing_Person Ext" min: 0.1 #km/#h ;
 	parameter "maximum speed for missing person" var: max_speed_missing category: "Missing_Person Ext" max: 50 #km/#h;
+	
+	//TODO
 	parameter "Value of destruction when a people agent takes a road" var: destroy category: "Road" ;
 	
 	output {
@@ -496,8 +551,5 @@ experiment find_missing_person type: gui {
         monitor "Hours Missing" value: hours_that_is_missing;
         monitor "Minutes Missing" value: minutes_that_is_missing;
         monitor "Current Date" value: current_date;
-        
-        monitor "CURRENT HOUR" value: current_hour;
-
 	}
 }
