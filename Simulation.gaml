@@ -9,7 +9,14 @@ model MyThesis
 
 global {
 	//GIS Input//
-
+	
+	date true_date <- #now;
+	int year_missing <- true_date.year;
+	int month_missing <- true_date.month;
+	int day_missing <- true_date.day;
+	int hour_missing <- true_date.hour;
+	int minute_missing <- true_date.minute;
+	date starting_date <- date([year_missing,month_missing,day_missing,hour_missing,minute_missing,0]); //[Year, Month, Day, Hour, Minute, Sec]
 	//map used to filter the object to build from the OSM file according to attributes. for an exhaustive list, see: http://wiki.openstreetmap.org/wiki/Map_Features
 	map filtering <- (["highway"::["primary", "secondary", "tertiary", "motorway", "living_street","residential", "unclassified"], "building"::["yes"]]);
 	
@@ -21,12 +28,17 @@ global {
 	
 	float step <- 1 #mn; //every step is defined as 1 minute
 	
+	
 	int nb_people <- 100; //number of people in the simulation
 	int nb_missing <- 1; //number of missing people (It will always be 1 in this simulation)
 	int missing -> {length(missing_person)};
+	int days_that_is_missing update: int(time / #day);
+	int hours_that_is_missing update: int(time / #hour) mod 24;
+	int minutes_that_is_missing update: int(time / #minute) mod 60;
+	int current_hour <- starting_date.hour update: current_date.hour; //the current hour of the simulation
+	int current_min <- starting_date.minute update: current_date.minute; //the current minute
 	
-	int current_hour update: (time / #hour) mod 24; //the current hour of the simulation
-	int current_min update: (time/ #minutes) mod 60;
+	
 	//variables conserning the times that people go and leave work respectively
 	int min_work_start <- 7;
 	int max_work_start <- 9;
@@ -70,7 +82,7 @@ global {
 	
 	bool a_boolean_to_enable_parameters1 <- false;
 	bool a_boolean_to_enable_parameters2 <- false;
-	
+	bool a_boolean_to_enable_parameters3 <- false;	
 	
 
 	
@@ -114,6 +126,10 @@ global {
 			//define a living and a working place for each agent from the imported buildings
 			living_place <- one_of(building) ;
 			working_place <- one_of(building) ;
+			
+			//define specific spot inside building where agent resides or works
+			home_spot <- any_location_in (living_place);
+			work_spot <- any_location_in (working_place);
 
 
 			distance <- 1.5 * (living_place distance_to working_place);
@@ -122,9 +138,20 @@ global {
 			if (small_distance) {walking_bool <- true;}
 			else {driving_bool <- true;}
    	
-			objective <- "resting"; //each agent will begin resting, until it's time for him/her to go to work
-			location <- any_location_in (living_place); //the agents home is his/her starting location	
-			
+			//depending on the starting time of the simulation, the agent's starting location is either their
+			//home or their workplace. Depending on where they are, the objective will either be working or resting.
+			write(current_hour);
+			if(current_hour >= start_work and current_hour <= end_work) {
+				write("LOCATION WORK"); 
+				objective <- "working";
+				location <- work_spot;
+			}
+			else {
+				write("LOCATION HOME"); 
+				objective <- "resting";
+				location <- home_spot;
+			}
+		
 			driving_bool <- false;
 			walking_bool <- false;
 			
@@ -315,17 +342,19 @@ species people skills:[moving] {
 	
 	string objective ; 
 	point the_target <- nil ;
+	point work_spot <- nil;
+	point home_spot <- nil;
 		
 	//this reflex sets the target when it's time to work and changes the objective of the agent to working
 	reflex time_to_work when: current_hour = start_work and objective = "resting"{
 		objective <- "working" ;
-		the_target <- any_location_in (working_place);
+		the_target <- work_spot;
 	}
 		
 	//this reflex sets the target when it's time to go home and changes the objective of the agent to resting
 	reflex time_to_go_home when: current_hour = end_work and objective = "working"{
 		objective <- "resting" ;
-		the_target <- any_location_in (living_place); 
+		the_target <- home_spot; 
 	} 				
 	
 	//this reflex defines ...
@@ -409,13 +438,19 @@ experiment find_missing_person type: gui {
 	parameter "PoI building name" var: Point_of_Interest1_name category: "Missing_Person";
 	parameter "Starting Position" var:  MP_Starting_Pos_name category: "Missing_Person";
 	
-	
 	// Category: interactive enable
 	//////////////////////////////////////////////
 	// In the following, when a_boolean_to_enable_parameters1 ορ 2 is true, it enables the corresponding parameters 
-	parameter "People" category:"Activate Extended Parameters" var:a_boolean_to_enable_parameters1 enables: [min_work_start, max_work_start,
+	parameter "Start Time" category: "Activate Extended Parameters" var:a_boolean_to_enable_parameters1 enables: [year_missing, month_missing, day_missing, hour_missing, minute_missing];
+	parameter "People" category:"Activate Extended Parameters" var:a_boolean_to_enable_parameters2 enables: [min_work_start, max_work_start,
 		 min_work_end, max_work_end, min_walking_speed, max_walking_speed, min_driving_speed, max_driving_speed];
-	parameter "Missing Person" category:"Activate Extended Parameters" var:a_boolean_to_enable_parameters2 enables: [min_speed_missing, max_speed_missing ];
+	parameter "Missing Person" category:"Activate Extended Parameters" var:a_boolean_to_enable_parameters3 enables: [min_speed_missing, max_speed_missing ];
+	
+	parameter "Year" var: year_missing category: "Start Time";
+	parameter "Month" var: month_missing category: "Start Time";
+	parameter "Day" var: day_missing category: "Start Time";
+	parameter "Hour" var: hour_missing category: "Start Time";
+	parameter "Minute" var: minute_missing category: "Start Time";
 	
 	parameter "Earliest hour to start work"  category: "People" var: min_work_start min: 2 max: 8 step: 0.5;
     parameter "Latest hour to start work" var: max_work_start category: "People" min: 8 max: 12;
@@ -454,13 +489,15 @@ experiment find_missing_person type: gui {
 			species building aspect: base; //refresh: false;
 			species road aspect: base; // refresh: false;
 			species missing_person aspect: base ;
-			species people aspect: base;
-			
-			
+			species people aspect: base;	
 		}
        
-        monitor "Current Hour" value: current_hour;
-        monitor "Current Minute" value: current_min;
+        monitor "Days Missing" value: days_that_is_missing;
+        monitor "Hours Missing" value: hours_that_is_missing;
+        monitor "Minutes Missing" value: minutes_that_is_missing;
+        monitor "Current Date" value: current_date;
+        
+        monitor "CURRENT HOUR" value: current_hour;
 
 	}
 }
