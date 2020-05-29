@@ -62,7 +62,7 @@ global {
 	
 	//variables concerning the probability of finding the missing person when near them
 	float proba_find_walking <- 0.4;
-	float proba_find_driving <- 0.1;
+	float proba_find_driving <- 0.2;
 	float proba_find_resting <- 0.05;
 	
 	//variables for probabilistic location of missing person
@@ -70,6 +70,11 @@ global {
 	string Point_of_Interest1_name <- nil;
 	point MP_Starting_Pos <- nil;
 	string MP_Starting_Pos_name <- nil;
+	
+	int times_found<- 0;
+	int times_found_walking <- 0;
+	int times_found_driving <- 0;
+	int times_found_resting <- 0;
 	
 	//bool variable for mp resting
 	//When missing person is resting it is unlikely that they will be found
@@ -91,6 +96,7 @@ global {
 	bool a_boolean_to_enable_parameters3 <- false;	
 	bool a_boolean_to_enable_parameters4 <- false;
 	
+	bool is_batch <- false;
 
 	
 	init {
@@ -410,19 +416,25 @@ species people skills:[moving] {
 		if(walking_bool){
 			write "Walking and near " + self;
 			if(flip(proba_find_walking)){
-				write "Took a walk and stars aligned, FOUND by " + self;
+				times_found <- times_found + 1;
+				times_found_walking <- times_found_walking + 1;
+				write "Took a walk and stars aligned, FOUND by " + self +" Times Found " + times_found;
 			}
 		}
 		else if(driving_bool){
 			write ("Driving and near" + self);
 			if(flip(proba_find_driving)){
-				write "Prayers to driving gods helped, FOUND by " + self;
+				times_found <- times_found + 1;
+				times_found_driving <- times_found_driving + 1;
+				write "Prayers to driving gods helped, FOUND by " + self +" Times Found " +times_found;
 			}
 		}
 		else {
 			//write "Resting Phase and Near";
 			if(flip(proba_find_resting) and m_p_resting = false){
-				write "Quarantine is King, FOUND by" +self;
+				times_found <- times_found + 1;
+				times_found_resting <- times_found_resting + 1;
+				write "Quarantine is King, FOUND by " +self +" Times Found " +times_found;
 			}
 		}
 		
@@ -551,5 +563,29 @@ experiment find_missing_person type: gui {
         monitor "Hours Missing" value: hours_that_is_missing;
         monitor "Minutes Missing" value: minutes_that_is_missing;
         monitor "Current Date" value: current_date;
+        monitor "Times Found" value: times_found;
+        monitor "Times Found Walking" value: times_found_walking;
+        monitor "Times Found Driving" value: times_found_driving;
+        monitor "Times Found Resting" value: times_found_resting;
 	}
+}
+
+experiment Optimization type: batch repeat: 2 keep_seed: true until: ( time > 20000 ) {
+	parameter "Number of People in Area" var: nb_people min:800 max:1000 step: 20;
+	//parameter "Probability of finding ms if walking" var: proba_find_walking category: "Probabilities" min: 0.01 max: 1.0 step: 0.1;
+	//parameter "Probability of finding ms if driving" var: proba_find_driving category: "Probabilities" min: 0.01 max: 1.0 step: 0.1;
+	//parameter "Probability of finding ms while resting" var: proba_find_resting category: "Probabilities" min: 0.01 max: 1.0 step: 0.1;
+  	//parameter "Batch mode:" var: is_batch <- true;
+   //,proba_find_walking,proba_find_driving,proba_find_resting  //2880
+   
+    method exhaustive maximize: times_found;
+    //method tabu maximize: times_found iter_max: 10 tabu_list_size: 3;
+    
+    
+    reflex save_results_explo {
+        ask simulations {
+            save [int(self),nb_people, self.times_found, self.times_found_walking, self.times_found_driving, self.times_found_resting] 
+                   to: "C:/Users/mpizi/Documents/Διπλωματική/results_mp.csv" type: "csv" rewrite: (int(self) = 0) ? true : false header: true;
+        }        
+    }
 }
