@@ -8,7 +8,7 @@
 model MyThesis
 
 global {
-	//GIS Input//
+	
 	
 	
 	
@@ -19,11 +19,13 @@ global {
 	int hour_missing <- true_date.hour;
 	int minute_missing <- true_date.minute;
 	date starting_date <- date([year_missing,month_missing,day_missing,hour_missing,minute_missing,0]); //[Year, Month, Day, Hour, Minute, Sec]
+	
+	//GIS Input//
 	//map used to filter the object to build from the OSM file according to attributes. for an exhaustive list, see: http://wiki.openstreetmap.org/wiki/Map_Features
 	map filtering <- (["highway"::["primary", "secondary", "tertiary", "motorway", "living_street","residential", "unclassified"], "building"::["yes"]]);
 	
 	//OSM file to load
-	file<geometry> osmfile <-  file<geometry>(osm_file("C:/Users/mpizi/Downloads/map(5).osm", filtering))  ;
+	file<geometry> osmfile <-  file<geometry>(osm_file("../includes/map(6).osm", filtering))  ;
 	
 	//compute the size of the environment from the envelope of the OSM file
 	geometry shape <- envelope(osmfile);
@@ -31,7 +33,7 @@ global {
 	float step <- 1 #mn; //every step is defined as 1 minute
 	
 	
-	int nb_people <- 473; //number of people in the simulation
+	int nb_people <- 200; //number of people in the simulation
 	int nb_missing <- 1; //number of missing people (It will always be 1 in this simulation)
 	int missing -> {length(missing_person)};
 	int days_that_is_missing update: int(time / #day);
@@ -75,6 +77,7 @@ global {
 	int times_found_walking <- 0;
 	int times_found_driving <- 0;
 	int times_found_resting <- 0;
+	int close_call <-0;
 	
 	//bool variable for mp resting
 	//When missing person is resting it is unlikely that they will be found
@@ -197,7 +200,6 @@ global {
 			
 			speed <- min_speed_missing + rnd (max_speed_missing- min_speed_missing) ;		
 			
-			//the following are similar to the normal agents parameters
 			
 			if (MP_Starting_Pos_name != nil){
 				ask building.population {
@@ -238,24 +240,25 @@ global {
 						self.color <- #gamablue;
 					}
 					
-					if(!myself.input_flag) {
+					/*if(!myself.input_flag) {
 						write "Wrong Input PoI, no PoI added";
+						//Point_of_Interest1_name <- nil;
 						
-					}
+					}*/
 				} 
 			}
 		}
 	}
 	
-	//the following stops the simulation when the missing person is found
-	reflex stop_simulation when: missing = 0 {
+//the following stops the simulation when the missing person is found
+reflex stop_simulation when: times_found = 1 {
 		do pause;
 	}
-	
+/* 	
 	reflex update_graph{
         map<road,float> weights_map <- road as_map (each:: (each.destruction_coeff * each.shape.perimeter));
         the_graph <- the_graph with_weights weights_map;
-     }
+     }*/
 }
 
 
@@ -287,9 +290,9 @@ species road  {
 	//rgb color <- #black ; //the color of each road
 	
 	//we will simulate traffeic with road_destruction
-	float destruction_coeff <- 1.0 max 2.0;
-    int colorValue <- int(255*(destruction_coeff - 1)) update: int(255*(destruction_coeff - 1));
-    rgb color <- rgb(min([255, colorValue]),max ([0, 255 - colorValue]),0)  update: rgb(min([255, colorValue]),max ([0, 255 - colorValue]),0) ;
+	//float destruction_coeff <- 1.0 max 2.0;
+    //int colorValue <- int(255*(destruction_coeff - 1)) update: int(255*(destruction_coeff - 1));
+    rgb color <- #gamagreen;
 	
 	aspect base {
 		draw shape color: color ;
@@ -411,9 +414,13 @@ species people skills:[moving] {
 		}
 	} 				
 	
-	//this reflex defines ...
-	reflex missing_person_nearby when: agents_at_distance(7) contains_any missing_person {
+	//this reflex defines the probabilistic model by which the agent is found
+	//in any of three states: 
+	//when the People Agent is a.walking, b.driving, c.resting
+	reflex missing_person_nearby when: agents_at_distance(4) contains_any missing_person {
+		
 		if(walking_bool){
+			close_call<-close_call+1;
 			write "Walking and near " + self;
 			if(flip(proba_find_walking)){
 				times_found <- times_found + 1;
@@ -422,6 +429,7 @@ species people skills:[moving] {
 			}
 		}
 		else if(driving_bool){
+			close_call<-close_call+1;
 			write ("Driving and near" + self);
 			if(flip(proba_find_driving)){
 				times_found <- times_found + 1;
@@ -430,8 +438,9 @@ species people skills:[moving] {
 			}
 		}
 		else {
-			//write "Resting Phase and Near";
+			//write "Resting inside building Phase and Near";
 			if(flip(proba_find_resting) and m_p_resting = false){
+				close_call<-close_call+1;
 				times_found <- times_found + 1;
 				times_found_resting <- times_found_resting + 1;
 				write "Quarantine is King, FOUND by " +self +" Times Found " +times_found;
@@ -484,9 +493,11 @@ species people skills:[moving] {
 
 
 experiment find_missing_person type: gui {
-	parameter "Open Street Map File for area of simulation" var: osmfile category: "GIS" ;
+	parameter "Simulation Map (type: .osm)" var: osmfile category: "GIS" ;
 	
+	//Determines number of people agents in simulation using globla var nb_people
 	parameter "Number of people agents" var: nb_people category: "GIS" ;
+	
 	parameter "Time for missing person to rest" var: time_to_rest category: "Missing_Person" ;
 	parameter "Probability of finding ms if walking" var: proba_find_walking category: "Probabilities" min: 0.01 max: 1.0;
 	parameter "Probability of finding ms if driving" var: proba_find_driving category: "Probabilities" min: 0.01 max: 1.0;
@@ -535,17 +546,16 @@ experiment find_missing_person type: gui {
 		
 		
 		
-		display chart_display refresh:every(10#cycles) {
-			chart "People Objective" type: pie style: exploded size: {1, 0.5} position: {0, 0.5}{
+		display chart_display refresh:every(1#cycles) {
+			chart "People Status" type: pie style: exploded size: {1, 0.5} position: {0, 0.5}{
                 data "Working" value: people count (each.objective="working") color: #magenta ;
                 data "Resting" value: people count (each.objective="resting") color: #blue ;
             }
-            chart "Number of people nearby the missing person" type: series  size: {1, 0.5} position: {0,0} {
-                data "Number of agents nearby" value: int(the_missing_agent get('nb_of_agents_nearby'))  color: #red;
+            chart "Finding Missing Person" type: series  size: {1, 0.5} position: {0,0} {
+                data "Times missing person was found" value: times_found  color: #red;
+                data "Times missing person was close to being found" value: close_call color: #green;
             }
-            /*chart "Number of times missiong person may have been found" type series size: {1, 0.5} position: {0,-0.5}{
-            	data ""
-            }*/
+    
             
         }
         
@@ -563,14 +573,17 @@ experiment find_missing_person type: gui {
         monitor "Hours Missing" value: hours_that_is_missing;
         monitor "Minutes Missing" value: minutes_that_is_missing;
         monitor "Current Date" value: current_date;
+        monitor "Close Calls" value: close_call;
         monitor "Times Found" value: times_found;
         monitor "Times Found Walking" value: times_found_walking;
         monitor "Times Found Driving" value: times_found_driving;
         monitor "Times Found Resting" value: times_found_resting;
+        
 	}
 }
 
-experiment Optimization type: batch repeat: 2 keep_seed: true until: ( time > 20000 ) {
+//20000 minutes is 13.88 days
+experiment Batch_Optimization_No_Times_Found type: batch repeat: 2 keep_seed: true until: ( (time / #day) > 4) {
 	parameter "Number of People in Area" var: nb_people min:800 max:1000 step: 20;
 	//parameter "Probability of finding ms if walking" var: proba_find_walking category: "Probabilities" min: 0.01 max: 1.0 step: 0.1;
 	//parameter "Probability of finding ms if driving" var: proba_find_driving category: "Probabilities" min: 0.01 max: 1.0 step: 0.1;
@@ -585,7 +598,21 @@ experiment Optimization type: batch repeat: 2 keep_seed: true until: ( time > 20
     reflex save_results_explo {
         ask simulations {
             save [int(self),nb_people, self.times_found, self.times_found_walking, self.times_found_driving, self.times_found_resting] 
-                   to: "C:/Users/mpizi/Documents/Διπλωματική/results_mp.csv" type: "csv" rewrite: (int(self) = 0) ? true : false header: true;
+                   to: "../results_no_times.csv" type: "csv" rewrite: (int(self) = 0) ? true : false header: true;
+        }        
+    }
+}
+
+experiment Batch_Optimization_First_Time type:batch repeat: 2 keep_seed: true until: ( times_found = 1 ) {
+	parameter "Number of People in Area" var: nb_people min:800 max:1000 step: 20;
+   
+    method exhaustive maximize: times_found;
+    //method tabu maximize: times_found iter_max: 10 tabu_list_size: 3;
+    
+    reflex save_results_explo {
+        ask simulations {
+            save [int(self),nb_people, (time / #day), (time / #minute) ] 
+                   to: "../results_first_time_mp.csv" type: "csv" rewrite: (int(self) = 0) ? true : false header: true;
         }        
     }
 }
